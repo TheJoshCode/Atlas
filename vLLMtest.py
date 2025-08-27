@@ -1,0 +1,2 @@
+from vllm import LLM
+llm = LLM(model="./Qwen3-1.7B-Q4_K_M.gguf")

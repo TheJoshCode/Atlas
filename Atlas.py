@@ -28,7 +28,7 @@ tts = TTS(model_name="tts_models/en/vctk/vits").to(device)
 retriever = SentenceTransformer('all-MiniLM-L6-v2', device=device)
 
 # Load vLLM Qwen3-1.7B model
-llm = LLM(model="./Qwen3-1.7B-Q4_K_M.gguf", tokenizer_name="Qwen/Qwen3:1.7B")
+llm = LLM(model="./Qwen3-1.7B-Q4_K_M.gguf")
 
 # --- RAG SETUP ---
 def load_and_index_documents():
