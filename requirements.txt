@@ -1,10 +1,12 @@
-torch==2.8.0
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+torch
 numpy==1.26.4
-sounddevice==0.5.1
-playsound3==3.2.5
-TTS==0.22.0
-sentence-transformers==5.1.0
-faiss-gpu==1.7.2
-requests==2.31.0
-whisperx==3.4.1
-vllm==0.10.1.1
+sounddevice
+playsound3
+TTS
+sentence-transformers
+faiss-cpu
+requests
+whisperx
+ollama

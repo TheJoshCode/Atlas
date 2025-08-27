@@ -11,7 +11,15 @@ from TTS.api import TTS
 import pickle
 from sentence_transformers import SentenceTransformer
 import faiss
-from vllm import LLM, SamplingParams
+from ollama import chat
+from ollama import ChatResponse
+
+messages = [
+        {"role": "system", "content": "test"},
+        {"role": "user", "content": "this is a test"}
+    ]
+
+output = chat(model="qwen3:1.7b", messages=messages)
 
 # --- GLOBAL STATE ---
 LAST_IMAGE = None
@@ -26,9 +34,7 @@ CHUNK_SIZE = 500
 device = "cuda" if torch.cuda.is_available() else "cpu"
 tts = TTS(model_name="tts_models/en/vctk/vits").to(device)
 retriever = SentenceTransformer('all-MiniLM-L6-v2', device=device)
-
-# Load vLLM Qwen3-1.7B model
-llm = LLM(model="./Qwen3-1.7B-Q4_K_M.gguf")
+STT = whisperx.load_model("large-v3-turbo", device=device, language="en")
 
 # --- RAG SETUP ---
 def load_and_index_documents():
@@ -94,6 +100,7 @@ def record_audio(threshold=0.02, silence_duration=1.0, sample_rate=16000, max_du
     recording = []
     silence_start = None
     started = False
+
     def callback(indata, *_):
         nonlocal started, silence_start
         volume = np.linalg.norm(indata)
@@ -109,14 +116,21 @@ def record_audio(threshold=0.02, silence_duration=1.0, sample_rate=16000, max_du
                     raise sd.CallbackStop
             else:
                 silence_start = None
+
     with sd.InputStream(callback=callback, channels=1, samplerate=sample_rate):
         try:
             sd.sleep(int(max_duration * 1000))
         except sd.CallbackStop:
             pass
+
+    if not recording:  # nothing captured
+        return None
+
     audio = np.concatenate(recording, axis=0)
+
+    # Save to proper WAV in BytesIO
     buf = io.BytesIO()
-    buf.write(audio.astype(np.float32).tobytes())
+    sf.write(buf, audio, sample_rate, format="WAV")
     buf.seek(0)
     return buf
 
@@ -124,9 +138,7 @@ def record_audio(threshold=0.02, silence_duration=1.0, sample_rate=16000, max_du
 def transcribe(buf):
     buf.seek(0)
     audio, sr = sf.read(buf)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = whisperx.load_model("medium", device=device)
-    result = model.transcribe(audio, batch_size=16)
+    result = STT.transcribe(audio, batch_size=16)
     transcription = result["text"].strip()
     with open(TRANSCRIPTION_FILE, "w") as f:
         f.write(transcription)
@@ -134,7 +146,7 @@ def transcribe(buf):
 
 # --- TEXT TO SPEECH ---
 def play_tts(text):
-    tts.tts_to_file(text=text, speaker_idx="p298", file_path="output.wav")
+    tts.tts_to_file(text=text, speaker="p298", file_path="output.wav")
     playsound("output.wav")
     os.remove("output.wav")
 
@@ -142,11 +154,14 @@ def play_tts(text):
 def ai_response(prompt):
     system_prompt = get_system_prompt()
     retrieved_docs = RAG_retrieval(prompt, top_k=2)
-    prompt_text = system_prompt + "\n\nRelevant Information:\n" + "\n".join(retrieved_docs) + "\n\nUser: " + prompt
-    sampling_params = SamplingParams(max_output_tokens=1024)
+    prompt_text = "\n\nRelevant Information:\n" + "\n".join(retrieved_docs) + "\n\nUser: " + prompt
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt_text}
+    ]
     try:
-        output = llm.generate([prompt_text], sampling_params=sampling_params)
-        reply = output[0].outputs[0].text.strip() + " Over."
+        output = chat(model="qwen3:1.7b", messages=messages, max_tokens=512, temperature=0.7)
+        reply = (output['message']['content'])
         print("Retrieved Context:\n", retrieved_docs)
         print("AI Response:", reply)
         play_tts(reply)
@@ -163,6 +178,8 @@ def main_loop():
     while True:
         try:
             audio_buf = record_audio()
+            if not audio_buf:
+                continue
             user_input = transcribe(audio_buf)
             if not user_input:
                 continue
