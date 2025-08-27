@@ -3,7 +3,7 @@ WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 RUN apt-get update
-RUN apt-get install -y ffmpeg libsndfile1 build-essential git wget curl python3-pip
+RUN apt-get install -y ffmpeg libsndfile1 build-essential git wget curl python3-pip pulseaudio
 RUN rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
